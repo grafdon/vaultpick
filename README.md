@@ -30,15 +30,47 @@ vaultpick is a single POSIX shell script on top of
 
 ## Install
 
-vaultpick is one file. Put it anywhere on your `PATH`:
+vaultpick is one file. Download it to a directory on your `PATH` and make it
+executable:
+
+```sh
+mkdir -p ~/.local/bin
+curl -fsSL https://github.com/grafdon/vaultpick/releases/latest/download/vaultpick -o ~/.local/bin/vaultpick
+chmod +x ~/.local/bin/vaultpick
+```
+
+Updating is the same three lines. To remove vaultpick, delete the file.
+
+The tools it builds on:
+
+| System | Command |
+| ------ | ------- |
+| Arch, CachyOS, Manjaro | `sudo pacman -S rbw fzf jq wl-clipboard` |
+| macOS | `brew install rbw fzf jq pinentry-mac` |
+| Debian, Ubuntu | `sudo apt install rbw jq wl-clipboard`, plus a current fzf from its [releases](https://github.com/junegunn/fzf/releases) (the packaged one is too old) |
+| Fedora | `sudo dnf install rbw fzf jq wl-clipboard` |
+
+On X11 install `xclip` instead of `wl-clipboard`. Then point rbw at your
+account once:
+
+```sh
+rbw config set email you@example.com
+rbw config set base_url https://vault.example.com   # only for Vaultwarden or self-hosted Bitwarden
+rbw login
+```
+
+If you would rather type less: `alias pw=vaultpick`.
+
+<details>
+<summary>From a clone</summary>
 
 ```sh
 git clone https://github.com/grafdon/vaultpick
 cd vaultpick
-make install            # installs to ~/.local/bin; set PREFIX to change that
+make install            # copies vaultpick to ~/.local/bin; set PREFIX to change that
 ```
 
-If you would rather type less: `alias pw=vaultpick`.
+</details>
 
 ## Usage
 
@@ -127,6 +159,14 @@ Known limits:
   names shift the columns of that line.
 - New TOTP secrets have to be added in the web vault or an app; `rbw edit`
   changes passwords and notes only.
+
+## Roadmap
+
+- More themes.
+- Packages, so that installing and updating is one command: AUR first, then
+  a Homebrew tap, later Debian/Ubuntu.
+
+Ideas and pull requests are welcome.
 
 ## Development
 
