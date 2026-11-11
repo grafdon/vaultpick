@@ -219,6 +219,7 @@ if [ -n "${CI:-}" ] && [ "$(uname -s)" = Darwin ]; then
 		mkdir "$tmp/bin"
 		ln -s "$root/tests/stubs/rbw" "$tmp/bin/rbw"
 		PATH="$tmp/bin:$original_path"
+		export RBW_STUB_VAULT="$root/tests/fixtures/vault.json" # the symlink hides the default
 		out=$(VAULTPICK_CLEAR=2 sh "$root/vaultpick" __copy password "$(id 1)")
 		contains 'real pbcopy: status line' "$out" 'clears in 2 s'
 		is 'real pbcopy: copies' "$(pbpaste)" 'demo-pw-github'
