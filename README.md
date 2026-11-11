@@ -30,6 +30,10 @@ vaultpick is a single POSIX shell script on top of
 
 ## Install
 
+Four steps, a few minutes.
+
+### 1. Get vaultpick
+
 vaultpick is one file. Download it to a directory on your `PATH` and make it
 executable:
 
@@ -41,7 +45,7 @@ chmod +x ~/.local/bin/vaultpick
 
 Updating is the same three lines. To remove vaultpick, delete the file.
 
-The tools it builds on:
+### 2. Install the tools it builds on
 
 | System | Command |
 | ------ | ------- |
@@ -50,8 +54,13 @@ The tools it builds on:
 | Debian, Ubuntu | `sudo apt install rbw jq wl-clipboard`, plus a current fzf from its [releases](https://github.com/junegunn/fzf/releases) (the packaged one is too old) |
 | Fedora | `sudo dnf install rbw fzf jq wl-clipboard` |
 
-On X11 install `xclip` instead of `wl-clipboard`. Then point rbw at your
-account once:
+On X11 install `xclip` instead of `wl-clipboard`. On macOS also run
+`rbw config set pinentry pinentry-mac`.
+
+### 3. Connect rbw to your vault
+
+rbw is the client that talks to Bitwarden or Vaultwarden. It needs to know
+your account once:
 
 ```sh
 rbw config set email you@example.com
@@ -59,12 +68,17 @@ rbw config set base_url https://vault.example.com   # only for Vaultwarden or se
 rbw login
 ```
 
-Finally, let vaultpick check the setup. It names what is missing and how to
-fix it:
+`rbw login` asks for your master password. After that rbw keeps the vault
+unlocked for a while and asks again when needed.
+
+### 4. Check the setup
 
 ```sh
 vaultpick --check
 ```
+
+This names anything that is missing and the command that fixes it. When it
+says "Everything needed is in place", run `vaultpick`.
 
 If you would rather type less: `alias pw=vaultpick`.
 
