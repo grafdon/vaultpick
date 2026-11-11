@@ -1,0 +1,480 @@
+#!/bin/sh
+# shellcheck disable=SC2016 # jq programs and fzf commands are single-quoted on purpose
+# vaultpick - pick a Bitwarden or Vaultwarden entry with fzf and copy what you need.
+#
+# Usage:
+#   vaultpick [query]      copy the password
+#   vaultpick -o [query]   copy the TOTP code
+#   vaultpick -u [query]   copy the username
+#   vaultpick -e [query]   edit the entry
+#   vaultpick -s [query]   print the whole entry (including the password!)
+#   vaultpick -h           show this help
+#   vaultpick -V           show the version
+#
+# Keys in the list:
+#   enter    the action chosen above (default: copy the password)
+#   ctrl-o   copy the TOTP code
+#   ctrl-u   copy the username
+#   ctrl-e   edit the entry
+#   ctrl-s   print the whole entry
+#   esc      close
+#
+# Copying keeps the list open, so username, password and TOTP code can be
+# fetched one after another without searching again. The status line says
+# what was copied from which entry, never the value itself. Recently used
+# entries are listed first; a query always searches the whole vault.
+#
+# Environment:
+#   VAULTPICK_THEME        ansi (default), amber or mocha; NO_COLOR is honoured
+#   VAULTPICK_RECENT       recent entries listed first (default 10, 0 = off)
+#   VAULTPICK_CLEAR        seconds until the clipboard is cleared (default 45, 0 = never)
+#   VAULTPICK_CLIPBOARD    auto (default), wayland, xclip, xsel, macos, termux, wsl, rbw
+#   VAULTPICK_ASCII        1 = ASCII only, 0 = Unicode (default: from the locale)
+#   VAULTPICK_PASS_LAYOUT  1 = a folder named like a domain is shown as the entry name
+#
+# Requires rbw, fzf 0.63 or newer, and jq.
+set -eu
+
+version=0.1.0
+
+die() {
+	printf 'vaultpick: %s\n' "$*" >&2
+	exit 1
+}
+has() { command -v "$1" >/dev/null 2>&1; }
+
+# Non-negative integer from $1, or the default $2. Leading zeros are dropped.
+num() {
+	case "$1" in
+	'' | *[!0-9]*) printf '%s' "$2" ;;
+	*) printf '%s' "$1" | sed 's/^0*\(.\)/\1/' ;;
+	esac
+}
+recent_max=$(num "${VAULTPICK_RECENT:-}" 10)
+clear_after=$(num "${VAULTPICK_CLEAR:-}" 45)
+
+# --- Look -------------------------------------------------------------------
+
+case "${VAULTPICK_ASCII:-}" in
+1) ascii=1 ;;
+0) ascii=0 ;;
+*)
+	case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in
+	*[Uu][Tt][Ff]-8* | *[Uu][Tt][Ff]8*) ascii=0 ;;
+	*) ascii=1 ;;
+	esac
+	;;
+esac
+if [ "$ascii" = 1 ]; then
+	g_recent='*' g_totp='*' g_link='>' g_ok='ok' g_err='x' g_dot='-' g_ell='~'
+	pointer='>' prompt='> ' label=' vault '
+else
+	g_recent='↺' g_totp='●' g_link='↗' g_ok='✓' g_err='✗' g_dot='·' g_ell='…'
+	pointer='▌' prompt='› ' label=' vault '
+fi
+
+esc=$(printf '\033')
+sgr() { printf '%s[%sm' "$esc" "$1"; }
+rgb() { sgr "38;2;$1"; }
+on_rgb() { sgr "48;2;$1"; }
+
+theme=${VAULTPICK_THEME:-ansi}
+[ -z "${NO_COLOR:-}" ] || theme=none
+c_reset=$(sgr 0)
+case "$theme" in
+none)
+	c_reset='' c_name='' c_user='' c_url='' c_dim='' c_accent=''
+	c_key='' c_chip_ok='' c_chip_err=''
+	fzf_colors='bw'
+	;;
+amber)
+	c_name="$(sgr 1)$(rgb '255;255;255')"
+	c_user=$(rgb '201;201;201')
+	c_url=$(rgb '130;130;130')
+	c_dim=$(rgb '105;105;105')
+	c_accent=$(rgb '255;199;32')
+	c_key="$(on_rgb '46;46;46')$(rgb '255;218;102')"
+	c_chip_ok="$(sgr 1)$(on_rgb '255;199;32')$(rgb '20;20;20')"
+	c_chip_err="$(sgr 1)$(on_rgb '239;68;68')$(rgb '255;255;255')"
+	fzf_colors='bg:-1,bg+:#242424,fg:#b8b8b8,fg+:#ffffff:bold,hl:#ffc720,hl+:#ffda66:bold,prompt:#ffc720,pointer:#ffc720,marker:#ffc720,info:#696969,spinner:#ffc720,header:#828282,footer:#828282,border:#2e2e2e,label:#ffc720:bold,query:#ffffff,separator:#2e2e2e,scrollbar:#3b3b3b,preview-border:#2e2e2e,preview-label:#ffc720,ghost:#424242,gutter:-1'
+	;;
+mocha)
+	c_name=$(rgb '205;214;244')
+	c_user=$(rgb '203;166;247')
+	c_url=$(rgb '250;179;135')
+	c_dim=$(rgb '127;132;156')
+	c_accent=$(rgb '166;227;161')
+	c_key="$(on_rgb '49;50;68')$(rgb '203;166;247')"
+	c_chip_ok="$(sgr 1)$(on_rgb '166;227;161')$(rgb '17;17;27')"
+	c_chip_err="$(sgr 1)$(on_rgb '243;139;168')$(rgb '17;17;27')"
+	fzf_colors='bg:-1,bg+:#313244,fg:#cdd6f4,fg+:#cdd6f4,hl:#fab387,hl+:#fab387,prompt:#cba6f7,pointer:#cba6f7,marker:#a6e3a1,info:#7f849c,spinner:#cba6f7,header:#7f849c,footer:#7f849c,border:#45475a,label:#fab387,query:#cdd6f4,separator:#45475a,scrollbar:#45475a,preview-border:#45475a,preview-label:#fab387,ghost:#585b70,gutter:-1'
+	;;
+ansi)
+	# The terminal's own 16 colours: works everywhere, light or dark.
+	c_name=$(sgr 1)
+	c_user=''
+	c_url=$(sgr 36)
+	c_dim=$(sgr 2)
+	c_accent=$(sgr 33)
+	c_key=$(sgr 7)
+	c_chip_ok=$(sgr '1;30;42')
+	c_chip_err=$(sgr '1;97;41')
+	fzf_colors='16,hl:3,hl+:3:bold,prompt:3,pointer:3,marker:3,spinner:3,info:-1:dim,header:-1:dim,footer:-1,label:3:bold,preview-label:3,gutter:-1'
+	;;
+*) die "unknown theme '$theme' (ansi, amber, mocha)" ;;
+esac
+
+# jq with the colours and glyphs every formatter needs
+jqf() {
+	jq -r --arg n "$c_name" --arg w "$c_user" --arg u "$c_url" --arg o "$c_dim" \
+		--arg t "$c_accent" --arg a "$c_reset" --arg ell "$g_ell" \
+		--arg dot "$g_totp" --arg link "$g_link" --arg rec "$g_recent" "$@"
+}
+
+# --- History ----------------------------------------------------------------
+
+# Recently used entries, newest first. IDs only, never names.
+history_file="${XDG_STATE_HOME:-$HOME/.local/state}/vaultpick/history"
+remember() {
+	[ "$recent_max" -gt 0 ] || return 0
+	mkdir -p "${history_file%/*}" 2>/dev/null || return 0
+	(
+		umask 077
+		{
+			printf '%s\n' "$1"
+			[ -f "$history_file" ] && grep -vxF -- "$1" "$history_file"
+		} | head -n 100 >"$history_file.$$" && mv "$history_file.$$" "$history_file"
+	) || :
+}
+
+# --- Clipboard --------------------------------------------------------------
+
+clipboard_backend() {
+	case "${VAULTPICK_CLIPBOARD:-auto}" in
+	auto) ;;
+	wayland | xclip | xsel | macos | termux | wsl | rbw)
+		printf '%s' "$VAULTPICK_CLIPBOARD"
+		return 0
+		;;
+	*) die "unknown VAULTPICK_CLIPBOARD '$VAULTPICK_CLIPBOARD'" ;;
+	esac
+	if [ -n "${WAYLAND_DISPLAY:-}" ] && has wl-copy; then
+		printf wayland
+	elif [ "$(uname -s)" = Darwin ] && has pbcopy; then
+		printf macos
+	elif [ -n "${TERMUX_VERSION:-}" ] && has termux-clipboard-set; then
+		printf termux
+	elif [ -n "${DISPLAY:-}" ] && has xclip; then
+		printf xclip
+	elif [ -n "${DISPLAY:-}" ] && has xsel; then
+		printf xsel
+	elif has clip.exe; then
+		printf wsl
+	else
+		printf rbw
+	fi
+}
+
+# Put $1 on the clipboard. Under Wayland the value is marked sensitive so that
+# clipboard managers keep it out of their history (wl-clipboard 2.2 or newer).
+sensitive=0
+clip_set() {
+	case "$backend" in
+	wayland)
+		sensitive=1
+		printf '%s' "$1" | wl-copy --sensitive 2>/dev/null || {
+			sensitive=0
+			printf '%s' "$1" | wl-copy
+		}
+		;;
+	macos) printf '%s' "$1" | pbcopy ;;
+	termux) printf '%s' "$1" | termux-clipboard-set ;;
+	xclip) printf '%s' "$1" | xclip -selection clipboard ;;
+	xsel) printf '%s' "$1" | xsel --clipboard --input ;;
+	wsl) printf '%s' "$1" | clip.exe ;;
+	*) return 1 ;;
+	esac >/dev/null 2>&1
+}
+clip_get() {
+	case "$backend" in
+	wayland) wl-paste -n ;;
+	macos) pbpaste ;;
+	termux) termux-clipboard-get ;;
+	xclip) xclip -selection clipboard -o ;;
+	xsel) xsel --clipboard --output ;;
+	*) return 1 ;;
+	esac 2>/dev/null
+}
+clip_clear() {
+	case "$backend" in
+	wayland) wl-copy --clear ;;
+	macos) printf '' | pbcopy ;;
+	termux) termux-clipboard-set '' ;;
+	xclip) printf '' | xclip -selection clipboard ;;
+	xsel) xsel --clipboard --clear ;;
+	esac >/dev/null 2>&1
+}
+
+# Copy one field of an entry and print the new status line for fzf's footer.
+# The value itself is never printed.
+copy_action() {
+	what=$1 id=$2
+	case "$what" in
+	password) value=$(rbw get "$id" 2>/dev/null) || value='' ;;
+	totp) value=$(rbw code "$id" 2>/dev/null) || value='' ;;
+	username) value=$(rbw get --field username "$id" 2>/dev/null) || value='' ;;
+	*) die "unknown field '$what'" ;;
+	esac
+	chip=$(printf '%s' "$what" | tr '[:lower:]' '[:upper:]')
+	if [ -z "$value" ]; then
+		printf '%s %s %s %s  %sno %s in this entry%s' \
+			"$c_chip_err" "$g_err" "$chip" "$c_reset" "$c_dim" "$what" "$c_reset"
+		return 0
+	fi
+
+	backend=$(clipboard_backend)
+	if [ "$backend" = rbw ]; then
+		case "$what" in
+		password) rbw get --clipboard "$id" ;;
+		totp) rbw code --clipboard "$id" ;;
+		username) rbw get --field username --clipboard "$id" ;;
+		esac >/dev/null 2>&1 || backend=failed
+		hint='via rbw, not cleared automatically'
+	elif clip_set "$value"; then
+		case "$backend:$clear_after" in
+		*:0) hint='not cleared automatically' ;;
+		wsl:*) hint='not cleared automatically' ;;
+		*)
+			(
+				trap '' HUP
+				sleep "$clear_after"
+				[ "$(clip_get)" = "$value" ] && clip_clear
+				:
+			) </dev/null >/dev/null 2>&1 &
+			hint="clears in $clear_after s"
+			[ "$sensitive" = 0 ] || hint="$hint, kept out of clipboard history"
+			;;
+		esac
+	else
+		backend=failed
+	fi
+	if [ "$backend" = failed ]; then
+		printf '%s %s %s %s  %scould not reach the clipboard%s' \
+			"$c_chip_err" "$g_err" "$chip" "$c_reset" "$c_dim" "$c_reset"
+		return 0
+	fi
+
+	remember "$id"
+	who=$(rbw get --raw "$id" 2>/dev/null | jqf '
+		def clean: gsub("[[:cntrl:]]"; " ");
+		(.name // "" | clean) as $name | (.data.username // "" | clean) as $user
+		| "\($n)\($name)\($a)" + (if $user != "" then "  \($w)\($user)\($a)" else "" end)') || who=''
+	printf '%s %s %s %s  %s  %s%s %s %s %s%s' "$c_chip_ok" "$g_ok" "$chip" "$c_reset" \
+		"$who" "$c_dim" "$g_dot" "$(date +%H:%M:%S)" "$g_dot" "$hint" "$c_reset"
+}
+
+# Preview pane: name, username, folder, TOTP yes/no and all URLs. No secrets.
+preview() {
+	rbw get --raw "$1" | jqf '
+		def clean: gsub("[[:cntrl:]]"; " ");
+		(.name // "" | clean) as $name | (.data.username // "" | clean) as $user
+		| (.folder // "" | clean) as $folder
+		| "\($n)\($name)\($a)"
+		  + (if $user != "" and $user != $name then "  \($w)\($user)\($a)" else "" end)
+		  + (if $folder != "" then "  \($o)\($folder)\($a)" else "" end)
+		  + (if .data.totp then "  \($t)\($dot) totp\($a)" else "" end),
+		(if ((.data.uris // []) | length) > 0
+			then (.data.uris[] | "\($t)\($link)\($a) \($u)\(.uri // "" | clean)\($a)")
+			else "\($o)no url\($a)" end)'
+}
+
+# --- Internal entry points, called by fzf -----------------------------------
+
+case "${1:-}" in
+__preview)
+	preview "$2"
+	exit 0
+	;;
+__copy)
+	copy_action "$2" "$3"
+	exit 0
+	;;
+__edit)
+	remember "$2"
+	exec rbw edit "$2"
+	;;
+__show)
+	remember "$2"
+	exec rbw get --full "$2"
+	;;
+-h | --help)
+	sed -n '3,/^set -eu$/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'
+	exit 0
+	;;
+-V | --version)
+	printf 'vaultpick %s\n' "$version"
+	exit 0
+	;;
+esac
+
+# --- Main -------------------------------------------------------------------
+
+action=password
+case "${1:-}" in
+-o) action=totp && shift ;;
+-u) action=username && shift ;;
+-e) action=edit && shift ;;
+-s) action=show && shift ;;
+--) shift ;;
+-?*) die "unknown option '$1' (see vaultpick -h)" ;;
+esac
+query="$*"
+
+has rbw || die 'rbw not found, see https://github.com/doy/rbw'
+has jq || die 'jq not found, see https://jqlang.org'
+has fzf || die 'fzf not found, see https://github.com/junegunn/fzf'
+fzf_version=$(fzf --version 2>/dev/null | sed -n '1s/^\([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1 \2/p')
+fzf_major=${fzf_version% *} fzf_minor=${fzf_version#* }
+case "$fzf_major$fzf_minor" in
+'' | *[!0-9]*) die 'could not read the fzf version' ;;
+esac
+if [ "$fzf_major" -eq 0 ] && [ "$fzf_minor" -lt 63 ]; then
+	die "fzf 0.63 or newer is needed, found 0.$fzf_minor. Distribution packages are often old; see https://github.com/junegunn/fzf#installation"
+fi
+
+case "$0" in
+/*) self=$0 ;;
+*) if [ -f "$0" ]; then self=$(pwd)/$0; else self=$(command -v -- "$0") || self=$0; fi ;;
+esac
+export _VAULTPICK_SELF="$self"
+
+rbw unlock || die 'could not unlock the vault'
+entries=$(rbw list --raw) || die 'rbw list failed'
+
+# Which entries have a TOTP secret? rbw list does not say, but rbw's local
+# cache does: the secret is encrypted there, yet whether one exists is visible.
+# Only IDs are read. Without the cache the marker is simply missing.
+totp_ids() {
+	config=$(rbw config show 2>/dev/null) || return 0
+	email=$(printf '%s' "$config" | jq -r '.email // ""') || return 0
+	server=$(printf '%s' "$config" | jq -r '.base_url // "" | @uri') || return 0
+	suffix=${RBW_PROFILE:+-$RBW_PROFILE}
+	for dir in "${XDG_CACHE_HOME:-$HOME/.cache}/rbw$suffix" "$HOME/Library/Caches/rbw$suffix"; do
+		for file in "$dir/$server:$email.json" "$dir/default:$email.json"; do
+			if [ -f "$file" ]; then
+				jq -r '.entries[]? | select((.data.Login.totp // null) != null) | .id' "$file" 2>/dev/null || :
+				return 0
+			fi
+		done
+	done
+}
+
+# Column widths follow the terminal. Whatever does not fit is cut off on
+# screen but can still be searched.
+term_cols() {
+	cols=$( (stty size </dev/tty | cut -d ' ' -f 2) 2>/dev/null) || cols=''
+	case "$cols" in '' | *[!0-9]* | 0) cols=${COLUMNS:-} ;; esac
+	case "$cols" in '' | *[!0-9]* | 0) cols=$(tput cols 2>/dev/null) || cols='' ;; esac
+	case "$cols" in '' | *[!0-9]* | 0) cols=120 ;; esac
+	printf '%s' "$cols"
+}
+flex=$(($(term_cols) - 22)) # frame, pointer, marker, 2FA column and gaps
+if [ "$flex" -ge 96 ]; then
+	w_name=26 w_user=30 w_url=26
+else
+	w_name=$((flex * 30 / 100)) w_user=$((flex * 32 / 100)) w_url=$((flex * 24 / 100))
+	[ "$w_name" -ge 10 ] || w_name=10
+	[ "$w_user" -ge 10 ] || w_user=10
+	[ "$w_url" -ge 8 ] || w_url=8
+fi
+
+pass_layout=0
+[ "${VAULTPICK_PASS_LAYOUT:-}" != 1 ] || pass_layout=1
+
+# Lines: id <tab> marker name  user  2fa  url  folder
+# Recently used entries first (newest on top), then the rest by folder and
+# name. History IDs that no longer exist are skipped. Control characters in
+# entry data are replaced, so a hostile name cannot draw on the terminal.
+list() {
+	printf '%s' "$entries" | jqf \
+		--arg ids "$(totp_ids | tr '\n' ' ')" \
+		--arg history "$(if [ -f "$history_file" ]; then tr '\n' ' ' <"$history_file"; fi)" \
+		--argjson max "$recent_max" --argjson pass "$pass_layout" \
+		--argjson wn "$w_name" --argjson ww "$w_user" --argjson wu "$w_url" '
+	def clean: gsub("[[:cntrl:]]"; " ");
+	def fit($b): (if length > $b then .[0:$b - 1] + $ell else . end) | . + (" " * ($b - length) // "");
+	def host: sub("^[a-z][a-z0-9+.-]*://"; "") | sub("^www\\."; "") | sub("[/?#].*$"; "");
+	($ids | split(" ") | map(select(. != "") | {(.): true}) | add // {}) as $totp
+	| (map({(.id): true}) | add // {}) as $known
+	| ($history | split(" ") | map(select($known[.])) | .[:$max]
+		| to_entries | map({(.value): .key}) | add // {}) as $recent
+	| sort_by(($recent[.id] // $max), (.folder // "" | ascii_downcase), (.name // "" | ascii_downcase))[]
+	| (.folder // "" | clean) as $folder | (.name // "" | clean) as $name | (.user // "" | clean) as $user
+	| ($folder | split("/")) as $parts | ($parts | last // "") as $last
+	| (if $pass == 1 and ($last | test("\\.")) and ($last | test("@") | not)
+		then {title: $last, path: ($parts[:-1] | join("/")), name: $name}
+		else {title: $name, path: $folder, name: (if $name == $user then "" else $name end)} end) as $d
+	| (if $user != "" and $user != $d.title then $user elif $d.name != $d.title then $d.name else "" end) as $who
+	| (if $d.name != "" and $d.name != $user and $d.name != $d.title then " - " + $d.name else "" end) as $extra
+	| ([.uris // [] | .[] | if type == "object" then .uri else . end
+		| select(type == "string" and . != "") | clean]) as $uris
+	| (if ($uris | length) == 0 then ""
+		else ($uris[0] | host) + (if ($uris | length) > 1 then " +\(($uris | length) - 1)" else "" end) end) as $url
+	| [.id,
+		(if $recent[.id] != null then "\($t)\($rec)\($a) " else "  " end)
+		+ "\($n)\($d.title | fit($wn))\($a)  \($w)\($who + $extra | fit($ww))\($a)  "
+		+ (if $totp[.id] then "\($t)\($dot) totp\($a)" else "      " end)
+		+ "  \($u)\($url | fit($wu))\($a)  \($o)\($d.path)\($a)"]
+	| join("\t")'
+}
+
+key() { printf '%s %s %s %s' "$c_key" "$1" "$c_reset" "$2"; }
+case "$action" in
+totp) enter_label='totp' ;;
+username) enter_label='username' ;;
+edit) enter_label='edit' ;;
+show) enter_label='show' ;;
+*) enter_label='password' ;;
+esac
+keys="$(key enter "$enter_label")   $(key ^o totp)   $(key ^u username)   $(key ^e edit)   $(key ^s show)   $(key esc close)"
+# shellcheck disable=SC2059 # the widths are part of the format
+columns=$(printf "  %s%-${w_name}s  %-${w_user}s  %-6s  %-${w_url}s  %s%s" \
+	"$c_dim" NAME USER 2FA URL FOLDER "$c_reset")
+ready="${c_dim}copying keeps the list open ${g_dot} esc closes${c_reset}"
+
+# fzf runs these through "sh -c" (see --with-shell), whatever the login shell.
+copy() { printf 'transform-footer("$_VAULTPICK_SELF" __copy %s {1})' "$1"; }
+run() { printf 'become("$_VAULTPICK_SELF" __%s {1})' "$1"; }
+case "$action" in
+edit | show) on_enter=$(run "$action") ;;
+*) on_enter=$(copy "$action") ;;
+esac
+binds="enter:$on_enter,double-click:$on_enter,ctrl-o:$(copy totp),ctrl-u:$(copy username),ctrl-e:$(run edit),ctrl-s:$(run show)"
+
+set -- --ansi --exact -i --tiebreak index --with-shell 'sh -c' \
+	--delimiter '\t' --with-nth 2 \
+	--layout reverse --height 75% --min-height 18 \
+	--border rounded --border-label "$label" --border-label-pos 3 \
+	--prompt "$prompt" --pointer "$pointer" \
+	--info inline-right --ghost 'name, user, url, folder or totp' \
+	--header "$keys
+
+$columns" --header-border line \
+	--color "$fzf_colors" \
+	--preview '"$_VAULTPICK_SELF" __preview {1}' \
+	--preview-window 'down,5,border-top,wrap' --preview-label ' details ' --preview-label-pos 3 \
+	--footer "$ready" --footer-border line \
+	--bind "$binds" \
+	--query "$query"
+[ "$ascii" = 0 ] || set -- "$@" --no-unicode
+# The gutter became a visible character in fzf 0.66; keep it blank.
+if [ "$fzf_major" -gt 0 ] || [ "$fzf_minor" -ge 66 ]; then
+	set -- "$@" --gutter ' '
+fi
+
+status=0
+list | fzf "$@" || status=$?
+case "$status" in
+1 | 130) exit 0 ;; # no match, or closed with esc
+*) exit "$status" ;;
+esac

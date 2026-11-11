@@ -1,0 +1,12 @@
+#!/bin/sh
+# Run vaultpick against the demo vault: nothing real is read, and the
+# "clipboard" is a temporary file. Handy for screenshots and for trying a
+# change.   tests/demo [vaultpick arguments]
+set -eu
+root=$(cd "$(dirname "$0")/.." && pwd)
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+# shellcheck disable=SC1091
+. "$root/tests/env.sh"
+export WAYLAND_DISPLAY=demo VAULTPICK_CLIPBOARD=wayland
+"$root/vaultpick" "$@"

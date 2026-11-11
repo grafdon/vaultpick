@@ -1,0 +1,35 @@
+[
+ {
+  "id": "00000000-0000-4000-8000-000000000001",
+  "folder": "fol\tder",
+  "name": "evil\u001b[31mred\ttab\nnewline\u009b2J",
+  "data": {
+   "username": "us\u0007er\u001b]0;title\u0007",
+   "password": "demo-pw-evil",
+   "totp": null,
+   "uris": [
+    {
+     "uri": "https://exa\u001b[5mmple.com/\tx",
+     "match_type": null
+    }
+   ]
+  },
+  "fields": [],
+  "notes": "",
+  "history": []
+ },
+ {
+  "id": "00000000-0000-4000-8000-000000000002",
+  "folder": "",
+  "name": "plain",
+  "data": {
+   "username": "user",
+   "password": "demo-pw-plain",
+   "totp": null,
+   "uris": []
+  },
+  "fields": [],
+  "notes": "",
+  "history": []
+ }
+]

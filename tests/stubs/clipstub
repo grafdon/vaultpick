@@ -1,0 +1,41 @@
+#!/bin/sh
+# Stand-in for every clipboard tool vaultpick knows. The "clipboard" is the
+# file $STUB_CLIP; the flags of the last write end up in $STUB_CLIP.flags.
+set -eu
+clip=${STUB_CLIP:?STUB_CLIP is not set}
+tool=$(basename "$0")
+args=" $* "
+write() {
+	cat >"$clip"
+	printf '%s %s\n' "$tool" "$*" >"$clip.flags"
+}
+case "$tool" in
+wl-copy)
+	case "$args" in
+	*' --clear '*) : >"$clip" ;;
+	*' --sensitive '*)
+		[ -z "${STUB_WL_OLD:-}" ] || exit 1
+		write "$@"
+		;;
+	*) write "$@" ;;
+	esac
+	;;
+wl-paste | pbpaste | termux-clipboard-get) cat "$clip" ;;
+pbcopy | clip.exe) write "$@" ;;
+termux-clipboard-set)
+	if [ $# -gt 0 ]; then printf '%s' "$1" >"$clip"; else write; fi
+	;;
+xclip)
+	case "$args" in
+	*' -o '*) cat "$clip" ;;
+	*) write "$@" ;;
+	esac
+	;;
+xsel)
+	case "$args" in
+	*' --output '*) cat "$clip" ;;
+	*' --clear '*) : >"$clip" ;;
+	*) write "$@" ;;
+	esac
+	;;
+esac

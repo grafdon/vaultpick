@@ -1,0 +1,46 @@
+#!/bin/sh
+# Stand-in for rbw, backed by a JSON fixture. Used by the tests and the demo.
+set -eu
+vault=${RBW_STUB_VAULT:-$(dirname "$0")/../fixtures/vault.json}
+[ -z "${RBW_STUB_LOG:-}" ] || printf '%s\n' "$*" >>"$RBW_STUB_LOG"
+entry() { jq -e --arg id "$1" '.[] | select(.id == $id)' "$vault"; }
+
+cmd=${1:-}
+[ $# -eq 0 ] || shift
+case "$cmd" in
+unlock | unlocked | sync) ;;
+--version) echo 'rbw 0.0.0 (stub)' ;;
+config) echo '{"email": "demo@example.com", "base_url": "https://vault.example.com"}' ;;
+list)
+	jq '[.[] | {id, name, user: (.data.username // ""), folder: (.folder // ""),
+		uris: [.data.uris[]?.uri], type: "Login"}]' "$vault"
+	;;
+code)
+	[ "${1:-}" != --clipboard ] || exit 0
+	entry "$1" | jq -e -r 'if .data.totp then "123456" else empty end'
+	;;
+get)
+	mode=password field=''
+	while [ $# -gt 1 ]; do
+		case "$1" in
+		--raw) mode=raw ;;
+		--full) mode=full ;;
+		--clipboard) mode=clipboard ;;
+		--field) field=$2 && shift ;;
+		esac
+		shift
+	done
+	case "$mode:$field" in
+	clipboard:*) ;;
+	raw:*) entry "$1" ;;
+	full:*) entry "$1" | jq -e -r '"\(.data.password)\nUsername: \(.data.username)"' ;;
+	*:username) entry "$1" | jq -e -r '.data.username | select(. != null and . != "")' ;;
+	*) entry "$1" | jq -e -r '.data.password // empty' ;;
+	esac
+	;;
+edit) echo "rbw stub: would edit $(entry "$1" | jq -r .name)" ;;
+*)
+	echo "rbw stub: unsupported command '$cmd'" >&2
+	exit 2
+	;;
+esac

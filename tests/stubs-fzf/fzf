@@ -1,0 +1,16 @@
+#!/bin/sh
+# Stand-in for fzf: records the list and the arguments, then "closes".
+# With STUB_FZF_REAL=/path/to/fzf the real fzf runs instead, as a
+# non-interactive filter, which checks that it accepts our options.
+if [ -n "${STUB_FZF_REAL:-}" ]; then
+	[ "${1:-}" != --version ] || exec "$STUB_FZF_REAL" --version
+	query=$(printf '%s\n' "$@" | sed -n '/^--query$/{n;p;}')
+	exec "$STUB_FZF_REAL" "$@" --filter "$query"
+fi
+if [ "${1:-}" = --version ]; then
+	echo "${STUB_FZF_VERSION:-0.74.0} (stub)"
+	exit 0
+fi
+cat >"${STUB_FZF_OUT:?}"
+for arg in "$@"; do printf '%s\n' "$arg"; done >"$STUB_FZF_OUT.args"
+exit 130

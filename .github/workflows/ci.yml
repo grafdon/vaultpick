@@ -1,0 +1,44 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools (Linux)
+        if: runner.os == 'Linux'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q jq shellcheck dash busybox
+          # the packaged fzf is too old
+          gh release download --repo junegunn/fzf --pattern '*linux_amd64.tar.gz' --output fzf.tar.gz
+          sudo tar -xzf fzf.tar.gz -C /usr/local/bin fzf
+          rm fzf.tar.gz
+
+      - name: Install tools (macOS)
+        if: runner.os == 'macOS'
+        run: brew install fzf jq shellcheck
+
+      - name: Versions
+        run: |
+          fzf --version
+          jq --version
+          shellcheck --version | sed -n 2p
+
+      - run: make lint
+      - run: make test

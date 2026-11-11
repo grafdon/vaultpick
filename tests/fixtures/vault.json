@@ -1,0 +1,237 @@
+[
+ {
+  "id": "00000000-0000-4000-8000-000000000001",
+  "folder": "dev",
+  "name": "GitHub",
+  "data": {
+   "username": "octo-demo",
+   "password": "demo-pw-github",
+   "totp": "otpauth://totp/demo?secret=DEMODEMO",
+   "uris": [
+    {
+     "uri": "https://github.com/login",
+     "match_type": null
+    }
+   ]
+  },
+  "fields": [],
+  "notes": "",
+  "history": []
+ },
+ {
+  "id": "00000000-0000-4000-8000-000000000002",
+  "folder": "dev",
+  "name": "GitLab",
+  "data": {
+   "username": "octo-demo",
+   "password": "demo-pw-gitlab",
+   "totp": "otpauth://totp/demo?secret=DEMODEMO",
+   "uris": [
+    {
+     "uri": "https://gitlab.com/users/sign_in",
+     "match_type": null
+    }
+   ]
+  },
+  "fields": [],
+  "notes": "",
+  "history": []
+ },
+ {
+  "id": "00000000-0000-4000-8000-000000000003",
+  "folder": "finance",
+  "name": "Example Bank",
+  "data": {
+   "username": "1234567",
+   "password": "demo-pw-bank",
+   "totp": "otpauth://totp/demo?secret=DEMODEMO",
+   "uris": [
+    {
+     "uri": "https://banking.example.com",
+     "match_type": null
+    },
+    {
+     "uri": "https://www.example.com/bank",
+     "match_type": null
+    }
+   ]
+  },
+  "fields": [],
+  "notes": "",
+  "history": []
+ },
+ {
+  "id": "00000000-0000-4000-8000-000000000004",
+  "folder": "finance",
+  "name": "Tax portal",
+  "data": {
+   "username": "jane.doe@example.com",
+   "password": "demo-pw-tax",
+   "totp": null,
+   "uris": [
+    {
+     "uri": "https://tax.example.org",
+     "match_type": null
+    }
+   ]
+  },
+  "fields": [],
+  "notes": "",
+  "history": []
+ },
+ {
+  "id": "00000000-0000-4000-8000-000000000005",
+  "folder": "personal",
+  "name": "Apple",
+  "data": {
+   "username": "jane.doe@example.com",
+   "password": "demo-pw-apple",
+   "totp": "otpauth://totp/demo?secret=DEMODEMO",
+   "uris": [
+    {
+     "uri": "https://appleid.apple.com",
+     "match_type": null
+    }
+   ]
+  },
+  "fields": [],
+  "notes": "",
+  "history": []
+ },
+ {
+  "id": "00000000-0000-4000-8000-000000000006",
+  "folder": "personal",
+  "name": "Mail",
+  "data": {
+   "username": "jane.doe@example.com",
+   "password": "demo-pw-mail",
+   "totp": null,
+   "uris": [
+    {
+     "uri": "https://mail.example.com",
+     "match_type": null
+    },
+    {
+     "uri": "imaps://imap.example.com:993",
+     "match_type": null
+    },
+    {
+     "uri": "smtp://smtp.example.com",
+     "match_type": null
+    }
+   ]
+  },
+  "fields": [],
+  "notes": "",
+  "history": []
+ },
+ {
+  "id": "00000000-0000-4000-8000-000000000007",
+  "folder": "home",
+  "name": "Home router",
+  "data": {
+   "username": "admin",
+   "password": "demo-pw-router",
+   "totp": null,
+   "uris": [
+    {
+     "uri": "http://192.168.1.1",
+     "match_type": null
+    }
+   ]
+  },
+  "fields": [],
+  "notes": "",
+  "history": []
+ },
+ {
+  "id": "00000000-0000-4000-8000-000000000008",
+  "folder": "home",
+  "name": "NAS",
+  "data": {
+   "username": "jane",
+   "password": "demo-pw-nas",
+   "totp": null,
+   "uris": [
+    {
+     "uri": "https://nas.example.net:5001",
+     "match_type": null
+    }
+   ]
+  },
+  "fields": [],
+  "notes": "",
+  "history": []
+ },
+ {
+  "id": "00000000-0000-4000-8000-000000000009",
+  "folder": "home",
+  "name": "Wi-Fi guest",
+  "data": {
+   "username": "",
+   "password": "demo-pw-wifi",
+   "totp": null,
+   "uris": []
+  },
+  "fields": [],
+  "notes": "",
+  "history": []
+ },
+ {
+  "id": "00000000-0000-4000-8000-000000000010",
+  "folder": "",
+  "name": "Streaming",
+  "data": {
+   "username": "jane.doe@example.com",
+   "password": "demo-pw-streaming",
+   "totp": null,
+   "uris": [
+    {
+     "uri": "https://www.streaming.example/login",
+     "match_type": null
+    }
+   ]
+  },
+  "fields": [],
+  "notes": "",
+  "history": []
+ },
+ {
+  "id": "00000000-0000-4000-8000-000000000011",
+  "folder": "personal/forum.example.org",
+  "name": "jane",
+  "data": {
+   "username": "jane",
+   "password": "demo-pw-forum",
+   "totp": null,
+   "uris": [
+    {
+     "uri": "https://forum.example.org",
+     "match_type": null
+    }
+   ]
+  },
+  "fields": [],
+  "notes": "",
+  "history": []
+ },
+ {
+  "id": "00000000-0000-4000-8000-000000000012",
+  "folder": "travel",
+  "name": "Züri Verkehrsbetriebe",
+  "data": {
+   "username": "jäne",
+   "password": "demo-pw-ümlaut",
+   "totp": null,
+   "uris": [
+    {
+     "uri": "https://tickets.example.ch",
+     "match_type": null
+    }
+   ]
+  },
+  "fields": [],
+  "notes": "",
+  "history": []
+ }
+]
