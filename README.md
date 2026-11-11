@@ -4,6 +4,8 @@ Pick an entry from your [Bitwarden](https://bitwarden.com) or
 [Vaultwarden](https://github.com/dani-garcia/vaultwarden) vault in the
 terminal and copy what you need: password, username or TOTP code.
 
+![vaultpick after copying a password: the list stays open and the status line says what was copied](docs/demo.png)
+
 vaultpick is a single POSIX shell script on top of
 [rbw](https://github.com/doy/rbw), [fzf](https://github.com/junegunn/fzf) and
 [jq](https://jqlang.org).
@@ -76,6 +78,10 @@ Everything is set through environment variables.
 | `VAULTPICK_CLIPBOARD`   | `auto`  | Force a clipboard tool: `wayland`, `xclip`, `xsel`, `macos`, `termux`, `wsl` or `rbw`. |
 | `VAULTPICK_ASCII`       | from the locale | `1` uses ASCII only, for terminals or fonts without Unicode. |
 | `VAULTPICK_PASS_LAYOUT` | `0`     | `1` is for vaults imported from `pass` or `gopass`, where the folder is the site and the entry is the username (`logins/example.com/jane`): the folder is then shown as the name. |
+
+The `mocha` theme, searching for every entry with a TOTP code:
+
+![vaultpick with the mocha theme and the query "totp"](docs/demo-mocha.png)
 
 ## Platforms
 
