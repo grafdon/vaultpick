@@ -87,6 +87,7 @@ apple id'
 	out=$(vp -h)
 	contains '-h shows the usage' "$out" 'vaultpick [query]'
 	contains '-h shows the whole header' "$out" 'Requires rbw'
+	contains '-h mentions the setup check' "$out" 'vaultpick -c'
 	lacks '-h stops before the code' "$out" 'set -eu'
 	contains '-V shows the version' "$(vp -V)" 'vaultpick 0.'
 	vp --nonsense 2>/dev/null
@@ -170,6 +171,43 @@ apple id'
 		is "$tool: cleared after the timeout" "$(cat "$tmp/clip-$tool")" ''
 	done
 	is 'a clipboard changed meanwhile is left alone' "$(cat "$tmp/clip-other")" 'something else'
+
+	# --- setup check and first run ---
+	out=$(vp --check)
+	is 'check: all good exits 0' "$?" 0
+	contains 'check: rbw' "$out" 'ok    rbw 0.0.0'
+	contains 'check: fzf' "$out" 'ok    fzf 0.74'
+	contains 'check: account' "$out" 'ok    rbw account is configured'
+	contains 'check: unlocked' "$out" 'ok    vault is unlocked'
+	contains 'check: clipboard' "$out" 'ok    clipboard: wl-copy, cleared after 45 s, kept out of the clipboard history'
+	contains 'check: TOTP markers' "$out" 'ok    TOTP markers: available'
+	contains 'check: verdict' "$out" 'Everything needed is in place.'
+	lacks 'check: says nothing about the account' "$out" 'example.com'
+	out=$(STUB_FZF_VERSION=0.44.0 vp -c)
+	is 'check: old fzf exits 1' "$?" 1
+	contains 'check: old fzf is named' "$out" 'FAIL  fzf 0.44 is too old, 0.63 or newer is needed'
+	out=$(RBW_STUB_CONFIG='{"email": null, "base_url": null, "pinentry": "sh"}' vp --check)
+	is 'check: no account exits 1' "$?" 1
+	contains 'check: no account, with the fix' "$out" '      rbw login'
+	out=$(RBW_STUB_CONFIG='{"email": "a@example.com", "pinentry": "no-such-pinentry"}' vp --check)
+	is 'check: missing pinentry exits 1' "$?" 1
+	contains 'check: missing pinentry is named' "$out" "FAIL  pinentry program 'no-such-pinentry' not found"
+	contains 'check: unknown account data is a warning' "$out" 'warn  TOTP markers: rbw cache not found'
+	out=$(RBW_STUB_LOCKED=1 vp --check)
+	is 'check: a locked vault is fine' "$?" 0
+	contains 'check: locked vault is named' "$out" 'ok    logged in, vault is locked'
+	out=$(VAULTPICK_CLIPBOARD=rbw vp --check)
+	is 'check: rbw clipboard is only a warning' "$?" 0
+	contains 'check: rbw clipboard warning' "$out" 'warn  clipboard: no clipboard tool found'
+	contains 'check: old wl-clipboard' "$(STUB_WL_OLD=1 vp --check)" 'warn  wl-clipboard 2.2 or newer'
+	VAULTPICK_CLIPBOARD=nope vp --check >/dev/null
+	is 'check: unknown clipboard tool exits 1' "$?" 1
+	out=$(RBW_STUB_CONFIG='{"email": null}' vp 2>&1)
+	is 'first run without an account exits 1' "$?" 1
+	contains 'first run: says how to set up rbw' "$out" 'rbw config set email you@example.com'
+	out=$(RBW_STUB_UNLOCK_FAIL=1 vp 2>&1)
+	is 'failed unlock exits 1' "$?" 1
+	contains 'failed unlock: points to rbw login and --check' "$out" 'vaultpick --check'
 
 	# --- preview, show, edit ---
 	out=$(vp __preview "$(id 3)" | plain)

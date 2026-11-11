@@ -12,6 +12,7 @@ write() {
 case "$tool" in
 wl-copy)
 	case "$args" in
+	*' --help '*) [ -n "${STUB_WL_OLD:-}" ] || echo '  -n, --sensitive  Hint that the content is sensitive' ;;
 	*' --clear '*) : >"$clip" ;;
 	*' --sensitive '*)
 		[ -z "${STUB_WL_OLD:-}" ] || exit 1

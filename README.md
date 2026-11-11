@@ -59,6 +59,13 @@ rbw config set base_url https://vault.example.com   # only for Vaultwarden or se
 rbw login
 ```
 
+Finally, let vaultpick check the setup. It names what is missing and how to
+fix it:
+
+```sh
+vaultpick --check
+```
+
 If you would rather type less: `alias pw=vaultpick`.
 
 <details>
@@ -80,6 +87,7 @@ vaultpick -o [query]   # copy the TOTP code
 vaultpick -u [query]   # copy the username
 vaultpick -e [query]   # edit the entry
 vaultpick -s [query]   # print the whole entry, including the password
+vaultpick --check      # check the setup
 ```
 
 The option only decides what Enter does. Every action is also on a key:

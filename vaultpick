@@ -8,6 +8,7 @@
 #   vaultpick -u [query]   copy the username
 #   vaultpick -e [query]   edit the entry
 #   vaultpick -s [query]   print the whole entry (including the password!)
+#   vaultpick -c           check the setup and say how to fix what is missing
 #   vaultpick -h           show this help
 #   vaultpick -V           show the version
 #
@@ -288,6 +289,150 @@ preview() {
 			else "\($o)no url\($a)" end)'
 }
 
+# --- Setup ------------------------------------------------------------------
+
+# fzf version as "major minor"; empty if it cannot be read
+fzf_version() {
+	fzf --version 2>/dev/null | sed -n '1s/^\([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1 \2/p'
+}
+
+rbw_setting() { rbw config show 2>/dev/null | jq -r --arg key "$1" '.[$key] // ""' 2>/dev/null; }
+
+# Path of rbw's local cache for the configured account; fails if there is none.
+rbw_cache_file() {
+	email=$(rbw_setting email)
+	server=$(rbw config show 2>/dev/null | jq -r '.base_url // "" | @uri' 2>/dev/null) || return 1
+	suffix=${RBW_PROFILE:+-$RBW_PROFILE}
+	for dir in "${XDG_CACHE_HOME:-$HOME/.cache}/rbw$suffix" "$HOME/Library/Caches/rbw$suffix"; do
+		for file in "$dir/$server:$email.json" "$dir/default:$email.json"; do
+			if [ -f "$file" ]; then
+				printf '%s' "$file"
+				return 0
+			fi
+		done
+	done
+	return 1
+}
+
+setup_hint='Set up rbw first:
+  rbw config set email you@example.com
+  rbw config set base_url https://vault.example.com   (only for Vaultwarden or self-hosted Bitwarden)
+  rbw login
+Then run "vaultpick --check".'
+
+# vaultpick --check: go through everything vaultpick needs. Never asks for the
+# master password and prints nothing about the account, so the output can be
+# pasted into a bug report.
+check() {
+	problems=0
+	say() { printf '%-5s %s\n' "$1" "$2"; }
+	fix() { printf '      %s\n' "$1"; }
+	bad() {
+		say FAIL "$1"
+		problems=1
+	}
+	printf 'vaultpick %s\n\n' "$version"
+
+	if has rbw; then
+		say ok "$(rbw --version 2>/dev/null | head -n 1)"
+	else
+		bad 'rbw not found'
+		fix 'install it: https://github.com/doy/rbw#installation'
+	fi
+	if has jq; then
+		say ok "$(jq --version 2>/dev/null | head -n 1)"
+	else
+		bad 'jq not found'
+		fix 'install it: https://jqlang.org/download/'
+	fi
+	found=$(fzf_version)
+	if ! has fzf; then
+		bad 'fzf not found'
+		fix 'install it: https://github.com/junegunn/fzf#installation'
+	elif [ -z "$found" ]; then
+		bad 'could not read the fzf version'
+	elif [ "${found% *}" -eq 0 ] && [ "${found#* }" -lt 63 ]; then
+		bad "fzf ${found% *}.${found#* } is too old, 0.63 or newer is needed"
+		fix 'distribution packages are often old; get a current one:'
+		fix 'https://github.com/junegunn/fzf#installation'
+	else
+		say ok "fzf ${found% *}.${found#* }"
+	fi
+
+	if has rbw && has jq; then
+		if [ -z "$(rbw_setting email)" ]; then
+			bad 'rbw has no account yet'
+			fix 'rbw config set email you@example.com'
+			fix 'rbw config set base_url https://vault.example.com   (only for Vaultwarden or self-hosted Bitwarden)'
+			fix 'rbw login'
+		else
+			say ok 'rbw account is configured'
+			pinentry=$(rbw_setting pinentry)
+			if has "${pinentry:-pinentry}"; then
+				say ok "pinentry: ${pinentry:-pinentry}"
+			else
+				bad "pinentry program '${pinentry:-pinentry}' not found; rbw needs it to ask for the master password"
+				fix 'macOS: brew install pinentry-mac && rbw config set pinentry pinentry-mac'
+				fix 'Linux: install the pinentry package of your distribution'
+			fi
+			if rbw unlocked >/dev/null 2>&1; then
+				say ok 'vault is unlocked'
+			elif rbw_cache_file >/dev/null; then
+				say ok 'logged in, vault is locked (rbw will ask for the master password)'
+			else
+				say warn 'vault is locked and no local rbw data was found'
+				fix 'if you have not logged in yet: rbw login'
+			fi
+			if rbw_cache_file >/dev/null; then
+				say ok 'TOTP markers: available'
+			else
+				say warn 'TOTP markers: rbw cache not found, entries with a TOTP code will not be marked'
+			fi
+		fi
+	fi
+
+	if backend=$(clipboard_backend 2>/dev/null); then
+		if [ "$clear_after" -gt 0 ]; then cleared="cleared after $clear_after s"; else cleared='never cleared (VAULTPICK_CLEAR=0)'; fi
+		case "$backend" in
+		wayland) tool=wl-copy ;;
+		macos) tool=pbcopy ;;
+		termux) tool=termux-clipboard-set ;;
+		wsl) tool=clip.exe ;;
+		*) tool=$backend ;;
+		esac
+		if ! has "$tool"; then
+			bad "clipboard: $tool not found (VAULTPICK_CLIPBOARD=$backend)"
+		elif [ "$backend" = rbw ]; then
+			say warn "clipboard: no clipboard tool found, rbw's own is used; not cleared automatically"
+			fix 'install wl-clipboard (Wayland), or xclip or xsel (X11)'
+		elif [ "$backend" = wsl ]; then
+			say warn 'clipboard: clip.exe, not cleared automatically'
+			fix 'with WSLg, install wl-clipboard to get clearing'
+		elif [ "$backend" = wayland ] && wl-copy --help 2>&1 | grep -q -e --sensitive; then
+			say ok "clipboard: wl-copy, $cleared, kept out of the clipboard history"
+		elif [ "$backend" = wayland ]; then
+			say ok "clipboard: wl-copy, $cleared"
+			say warn 'wl-clipboard 2.2 or newer would also keep values out of the clipboard history'
+		else
+			say ok "clipboard: $tool, $cleared"
+		fi
+	else
+		bad "clipboard: unknown VAULTPICK_CLIPBOARD '${VAULTPICK_CLIPBOARD:-}'"
+		fix 'use auto, wayland, xclip, xsel, macos, termux, wsl or rbw'
+	fi
+
+	if [ "$ascii" = 1 ]; then glyphs=ASCII; else glyphs=Unicode; fi
+	say ok "look: theme $theme, $glyphs glyphs"
+
+	printf '\n'
+	if [ "$problems" -eq 0 ]; then
+		printf 'Everything needed is in place.\n'
+	else
+		printf 'Fix the FAIL lines, then run "vaultpick --check" again.\n'
+	fi
+	return "$problems"
+}
+
 # --- Internal entry points, called by fzf -----------------------------------
 
 case "${1:-}" in
@@ -306,6 +451,10 @@ __edit)
 __show)
 	remember "$2"
 	exec rbw get --full "$2"
+	;;
+-c | --check)
+	check
+	exit $?
 	;;
 -h | --help)
 	sed -n '3,/^set -eu$/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'
@@ -333,8 +482,8 @@ query="$*"
 has rbw || die 'rbw not found, see https://github.com/doy/rbw'
 has jq || die 'jq not found, see https://jqlang.org'
 has fzf || die 'fzf not found, see https://github.com/junegunn/fzf'
-fzf_version=$(fzf --version 2>/dev/null | sed -n '1s/^\([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1 \2/p')
-fzf_major=${fzf_version% *} fzf_minor=${fzf_version#* }
+fzf_found=$(fzf_version)
+fzf_major=${fzf_found% *} fzf_minor=${fzf_found#* }
 case "$fzf_major$fzf_minor" in
 '' | *[!0-9]*) die 'could not read the fzf version' ;;
 esac
@@ -348,25 +497,17 @@ case "$0" in
 esac
 export _VAULTPICK_SELF="$self"
 
-rbw unlock || die 'could not unlock the vault'
+[ -n "$(rbw_setting email)" ] || die "rbw has no account yet.
+$setup_hint"
+rbw unlock || die 'could not unlock the vault. If you have not logged in yet, run "rbw login". "vaultpick --check" goes through the whole setup.'
 entries=$(rbw list --raw) || die 'rbw list failed'
 
 # Which entries have a TOTP secret? rbw list does not say, but rbw's local
 # cache does: the secret is encrypted there, yet whether one exists is visible.
 # Only IDs are read. Without the cache the marker is simply missing.
 totp_ids() {
-	config=$(rbw config show 2>/dev/null) || return 0
-	email=$(printf '%s' "$config" | jq -r '.email // ""') || return 0
-	server=$(printf '%s' "$config" | jq -r '.base_url // "" | @uri') || return 0
-	suffix=${RBW_PROFILE:+-$RBW_PROFILE}
-	for dir in "${XDG_CACHE_HOME:-$HOME/.cache}/rbw$suffix" "$HOME/Library/Caches/rbw$suffix"; do
-		for file in "$dir/$server:$email.json" "$dir/default:$email.json"; do
-			if [ -f "$file" ]; then
-				jq -r '.entries[]? | select((.data.Login.totp // null) != null) | .id' "$file" 2>/dev/null || :
-				return 0
-			fi
-		done
-	done
+	file=$(rbw_cache_file) || return 0
+	jq -r '.entries[]? | select((.data.Login.totp // null) != null) | .id' "$file" 2>/dev/null || :
 }
 
 # Column widths follow the terminal. Whatever does not fit is cut off on

@@ -8,9 +8,17 @@ entry() { jq -e --arg id "$1" '.[] | select(.id == $id)' "$vault"; }
 cmd=${1:-}
 [ $# -eq 0 ] || shift
 case "$cmd" in
-unlock | unlocked | sync) ;;
+unlock) [ -z "${RBW_STUB_UNLOCK_FAIL:-}" ] || exit 1 ;;
+unlocked) [ -z "${RBW_STUB_LOCKED:-}" ] || exit 1 ;;
+sync) ;;
 --version) echo 'rbw 0.0.0 (stub)' ;;
-config) echo '{"email": "demo@example.com", "base_url": "https://vault.example.com"}' ;;
+config)
+	if [ -n "${RBW_STUB_CONFIG:-}" ]; then
+		printf '%s\n' "$RBW_STUB_CONFIG"
+	else
+		echo '{"email": "demo@example.com", "base_url": "https://vault.example.com", "pinentry": "sh"}'
+	fi
+	;;
 list)
 	jq '[.[] | {id, name, user: (.data.username // ""), folder: (.folder // ""),
 		uris: [.data.uris[]?.uri], type: "Login"}]' "$vault"
