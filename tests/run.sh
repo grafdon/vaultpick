@@ -148,7 +148,7 @@ apple id'
 	echo 'no such theme' >"$saved"
 	VAULTPICK_THEME=mocha vp
 	contains 'a broken theme file is ignored' "$(cat "$STUB_FZF_OUT.args")" '#cba6f7'
-	contains 'palette: hex becomes an RGB sequence' "$(cat "$STUB_FZF_OUT")" "$esc[38;2;205;214;244m"
+	contains 'palette: hex becomes an RGB sequence' "$(cat "$STUB_FZF_OUT")" "${esc}[38;2;205;214;244m"
 	rm -f "$saved"
 	: >"$tmp/blocker"
 	XDG_CONFIG_HOME="$tmp/blocker" vp __theme ''
