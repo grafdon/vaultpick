@@ -23,9 +23,9 @@ vaultpick is a single POSIX shell script on top of
 
 ## Requirements
 
-- [rbw](https://github.com/doy/rbw), set up and logged in (`rbw login`)
-- [fzf](https://github.com/junegunn/fzf) 0.63 or newer. Distribution packages
-  are often older; vaultpick tells you if yours is.
+- [rbw](https://github.com/doy/rbw) 1.14 or newer (1.15 for the URL column),
+  set up and logged in (`rbw login`)
+- [fzf](https://github.com/junegunn/fzf) 0.63 or newer
 - [jq](https://jqlang.org)
 
 ## Install
@@ -51,11 +51,18 @@ Updating is the same three lines. To remove vaultpick, delete the file.
 | ------ | ------- |
 | Arch, CachyOS, Manjaro | `sudo pacman -S rbw fzf jq wl-clipboard` |
 | macOS | `brew install rbw fzf jq pinentry-mac` |
-| Debian, Ubuntu | `sudo apt install rbw jq wl-clipboard`, plus a current fzf from its [releases](https://github.com/junegunn/fzf/releases) (the packaged one is too old) |
-| Fedora | `sudo dnf install rbw fzf jq wl-clipboard` |
+| Fedora | `sudo dnf install fzf jq wl-clipboard`, plus rbw as described below |
+| Debian, Ubuntu | `sudo apt install jq wl-clipboard`, plus rbw and fzf as described below |
 
 On X11 install `xclip` instead of `wl-clipboard`. On macOS also run
 `rbw config set pinentry pinentry-mac`.
+
+Some distributions package versions that are too old, or none at all. At the
+time of writing that is rbw on Fedora, Debian stable and Ubuntu up to 26.04,
+and fzf on Debian stable and Ubuntu before 26.04. There, install rbw with `cargo install --locked rbw` (see
+[its README](https://github.com/doy/rbw#installation)) and take fzf from its
+[releases](https://github.com/junegunn/fzf/releases). Step 4 tells you whether
+your versions are new enough.
 
 ### 3. Connect rbw to your vault
 

@@ -11,7 +11,7 @@ case "$cmd" in
 unlock) [ -z "${RBW_STUB_UNLOCK_FAIL:-}" ] || exit 1 ;;
 unlocked) [ -z "${RBW_STUB_LOCKED:-}" ] || exit 1 ;;
 sync) ;;
---version) echo 'rbw 0.0.0 (stub)' ;;
+--version) echo "rbw ${RBW_STUB_VERSION:-1.15.0}" ;;
 config)
 	if [ -n "${RBW_STUB_CONFIG:-}" ]; then
 		printf '%s\n' "$RBW_STUB_CONFIG"

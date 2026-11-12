@@ -95,6 +95,13 @@ apple id'
 	out=$(STUB_FZF_VERSION=0.44.0 vp 2>&1)
 	is 'an old fzf is rejected' "$?" 1
 	contains 'with a clear message' "$out" 'fzf 0.63 or newer is needed, found 0.44'
+	out=$(RBW_STUB_VERSION=1.13.2 vp 2>&1)
+	is 'an old rbw is rejected' "$?" 1
+	contains 'with a clear message, too' "$out" 'rbw 1.14 or newer is needed, found 1.13'
+	RBW_STUB_VERSION=1.14.0 vp 2>/dev/null
+	is 'rbw 1.14 is accepted' "$?" 0
+	RBW_STUB_VERSION=2.0.1 vp 2>/dev/null
+	is 'rbw 2 is accepted' "$?" 0
 
 	# --- look ---
 	NO_COLOR=1 vp
@@ -216,7 +223,8 @@ apple id'
 	# --- setup check and first run ---
 	out=$(vp --check)
 	is 'check: all good exits 0' "$?" 0
-	contains 'check: rbw' "$out" 'ok    rbw 0.0.0'
+	contains 'check: rbw' "$out" 'ok    rbw 1.15'
+	lacks 'check: a current rbw gets no warning' "$out" 'URL column'
 	contains 'check: fzf' "$out" 'ok    fzf 0.74'
 	contains 'check: account' "$out" 'ok    rbw account is configured'
 	contains 'check: unlocked' "$out" 'ok    vault is unlocked'
@@ -227,6 +235,13 @@ apple id'
 	out=$(STUB_FZF_VERSION=0.44.0 vp -c)
 	is 'check: old fzf exits 1' "$?" 1
 	contains 'check: old fzf is named' "$out" 'FAIL  fzf 0.44 is too old, 0.63 or newer is needed'
+	out=$(RBW_STUB_VERSION=1.13.2 vp -c)
+	is 'check: old rbw exits 1' "$?" 1
+	contains 'check: old rbw is named' "$out" 'FAIL  rbw 1.13 is too old, 1.14 or newer is needed'
+	lacks 'check: an old rbw is not asked anything else' "$out" 'account'
+	out=$(RBW_STUB_VERSION=1.14.1 vp -c)
+	is 'check: rbw 1.14 is enough' "$?" 0
+	contains 'check: rbw 1.14 lacks the URL column' "$out" 'warn  rbw 1.15 or newer is needed for the URL column'
 	out=$(RBW_STUB_CONFIG='{"email": null, "base_url": null, "pinentry": "sh"}' vp --check)
 	is 'check: no account exits 1' "$?" 1
 	contains 'check: no account, with the fix' "$out" '      rbw login'

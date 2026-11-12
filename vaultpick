@@ -36,7 +36,7 @@
 #   VAULTPICK_ASCII        1 = ASCII only, 0 = Unicode (default: from the locale)
 #   VAULTPICK_PASS_LAYOUT  1 = a folder named like a domain is shown as the entry name
 #
-# Requires rbw, fzf 0.63 or newer, and jq.
+# Requires rbw 1.14 or newer, fzf 0.63 or newer, and jq.
 set -eu
 
 version=0.1.0
@@ -347,6 +347,12 @@ fzf_version() {
 	fzf --version 2>/dev/null | sed -n '1s/^\([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1 \2/p'
 }
 
+# rbw version as "major minor"; empty if it cannot be read
+rbw_version() {
+	rbw --version 2>/dev/null | sed -n '1s/^rbw \([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1 \2/p'
+}
+rbw_install='https://github.com/doy/rbw#installation ("cargo install --locked rbw" works everywhere)'
+
 rbw_setting() { rbw config show 2>/dev/null | jq -r --arg key "$1" '.[$key] // ""' 2>/dev/null; }
 
 # Path of rbw's local cache for the configured account; fails if there is none.
@@ -384,11 +390,23 @@ check() {
 	}
 	printf 'vaultpick %s\n\n' "$version"
 
-	if has rbw; then
-		say ok "$(rbw --version 2>/dev/null | head -n 1)"
-	else
+	found=$(rbw_version)
+	rbw_usable=0
+	if ! has rbw; then
 		bad 'rbw not found'
-		fix 'install it: https://github.com/doy/rbw#installation'
+		fix "install it: $rbw_install"
+	elif [ -z "$found" ]; then
+		bad 'could not read the rbw version'
+	elif [ "${found% *}" -lt 1 ] || { [ "${found% *}" -eq 1 ] && [ "${found#* }" -lt 14 ]; }; then
+		bad "rbw ${found% *}.${found#* } is too old, 1.14 or newer is needed"
+		fix 'distribution packages are often old; get a current one:'
+		fix "$rbw_install"
+	else
+		say ok "rbw ${found% *}.${found#* }"
+		rbw_usable=1
+		if [ "${found% *}" -eq 1 ] && [ "${found#* }" -lt 15 ]; then
+			say warn 'rbw 1.15 or newer is needed for the URL column'
+		fi
 	fi
 	if has jq; then
 		say ok "$(jq --version 2>/dev/null | head -n 1)"
@@ -410,7 +428,7 @@ check() {
 		say ok "fzf ${found% *}.${found#* }"
 	fi
 
-	if has rbw && has jq; then
+	if [ "$rbw_usable" = 1 ] && has jq; then
 		if [ -z "$(rbw_setting email)" ]; then
 			bad 'rbw has no account yet'
 			fix 'rbw config set email you@example.com'
@@ -553,6 +571,11 @@ export _VAULTPICK_ACTION="$action"
 has rbw || die 'rbw not found, see https://github.com/doy/rbw'
 has jq || die 'jq not found, see https://jqlang.org'
 has fzf || die 'fzf not found, see https://github.com/junegunn/fzf'
+rbw_found=$(rbw_version)
+case "$rbw_found" in
+'') die 'could not read the rbw version' ;;
+0\ * | 1\ [0-9] | 1\ 1[0-3]) die "rbw 1.14 or newer is needed, found ${rbw_found% *}.${rbw_found#* }. Distribution packages are often old; see $rbw_install" ;;
+esac
 fzf_found=$(fzf_version)
 fzf_major=${fzf_found% *} fzf_minor=${fzf_found#* }
 case "$fzf_major$fzf_minor" in
