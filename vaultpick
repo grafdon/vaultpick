@@ -18,6 +18,7 @@
 #   ctrl-u   copy the username
 #   ctrl-e   edit the entry
 #   ctrl-s   print the whole entry
+#   ctrl-t   switch to the next theme and remember it
 #   esc      close
 #
 # Copying keeps the list open, so username, password and TOTP code can be
@@ -26,7 +27,9 @@
 # entries are listed first; a query always searches the whole vault.
 #
 # Environment:
-#   VAULTPICK_THEME        ansi (default), amber or mocha; NO_COLOR is honoured
+#   VAULTPICK_THEME        the theme until ctrl-t picks one: ansi (default), amber,
+#                          mocha, latte, dracula, gruvbox, nord, onedark, rosepine,
+#                          solarized, tokyonight; NO_COLOR turns colour off
 #   VAULTPICK_RECENT       recent entries listed first (default 10, 0 = off)
 #   VAULTPICK_CLEAR        seconds until the clipboard is cleared (default 45, 0 = never)
 #   VAULTPICK_CLIPBOARD    auto (default), wayland, xclip, xsel, macos, termux, wsl, rbw
@@ -79,9 +82,58 @@ sgr() { printf '%s[%sm' "$esc" "$1"; }
 rgb() { sgr "38;2;$1"; }
 on_rgb() { sgr "48;2;$1"; }
 
+# The theme picked with ctrl-t is remembered and wins over VAULTPICK_THEME,
+# which is the starting point until then.
+themes='ansi amber mocha latte dracula gruvbox nord onedark rosepine solarized tokyonight'
+theme_file="${XDG_CONFIG_HOME:-$HOME/.config}/vaultpick/theme"
 theme=${VAULTPICK_THEME:-ansi}
+theme_saved=0
+if [ -f "$theme_file" ]; then
+	read -r saved <"$theme_file" || :
+	case "${saved:-}" in
+	'' | *[!a-z]*) ;; # not a theme name: ignored
+	*)
+		case " $themes " in *" $saved "*) theme=$saved theme_saved=1 ;; esac
+		;;
+	esac
+fi
 [ -z "${NO_COLOR:-}" ] || theme=none
+
+# The theme after $1 in the list, going round.
+next_theme() {
+	first='' previous=''
+	for name in $themes; do
+		[ -n "$first" ] || first=$name
+		if [ "$previous" = "$1" ]; then
+			printf '%s' "$name"
+			return 0
+		fi
+		previous=$name
+	done
+	printf '%s' "$first"
+}
 c_reset=$(sgr 0)
+
+# "r;g;b" from "rrggbb"
+dec() {
+	rest=${1#??} && red=${1%"$rest"}
+	blue=${rest#??} && green=${rest%"$blue"}
+	printf '%d;%d;%d' "0x$red" "0x$green" "0x$blue"
+}
+# A whole theme from ten colours: text, user, url, dim, ok, error, selected
+# line, border, ghost, text on a chip.
+palette() {
+	c_name=$(rgb "$(dec "$1")")
+	c_user=$(rgb "$(dec "$2")")
+	c_url=$(rgb "$(dec "$3")")
+	c_dim=$(rgb "$(dec "$4")")
+	c_accent=$(rgb "$(dec "$5")")
+	c_key="$(on_rgb "$(dec "$7")")$(rgb "$(dec "$2")")"
+	c_chip_ok="$(sgr 1)$(on_rgb "$(dec "$5")")$(rgb "$(dec "${10}")")"
+	c_chip_err="$(sgr 1)$(on_rgb "$(dec "$6")")$(rgb "$(dec "${10}")")"
+	fzf_colors="bg:-1,bg+:#$7,fg:#$1,fg+:#$1,hl:#$3,hl+:#$3,prompt:#$2,pointer:#$2,marker:#$5,info:#$4,spinner:#$2,header:#$4,footer:#$4,border:#$8,label:#$3,query:#$1,separator:#$8,scrollbar:#$8,preview-border:#$8,preview-label:#$3,ghost:#$9,gutter:-1"
+}
+
 case "$theme" in
 none)
 	c_reset='' c_name='' c_user='' c_url='' c_dim='' c_accent=''
@@ -99,17 +151,16 @@ amber)
 	c_chip_err="$(sgr 1)$(on_rgb '239;68;68')$(rgb '255;255;255')"
 	fzf_colors='bg:-1,bg+:#242424,fg:#b8b8b8,fg+:#ffffff:bold,hl:#ffc720,hl+:#ffda66:bold,prompt:#ffc720,pointer:#ffc720,marker:#ffc720,info:#696969,spinner:#ffc720,header:#828282,footer:#828282,border:#2e2e2e,label:#ffc720:bold,query:#ffffff,separator:#2e2e2e,scrollbar:#3b3b3b,preview-border:#2e2e2e,preview-label:#ffc720,ghost:#424242,gutter:-1'
 	;;
-mocha)
-	c_name=$(rgb '205;214;244')
-	c_user=$(rgb '203;166;247')
-	c_url=$(rgb '250;179;135')
-	c_dim=$(rgb '127;132;156')
-	c_accent=$(rgb '166;227;161')
-	c_key="$(on_rgb '49;50;68')$(rgb '203;166;247')"
-	c_chip_ok="$(sgr 1)$(on_rgb '166;227;161')$(rgb '17;17;27')"
-	c_chip_err="$(sgr 1)$(on_rgb '243;139;168')$(rgb '17;17;27')"
-	fzf_colors='bg:-1,bg+:#313244,fg:#cdd6f4,fg+:#cdd6f4,hl:#fab387,hl+:#fab387,prompt:#cba6f7,pointer:#cba6f7,marker:#a6e3a1,info:#7f849c,spinner:#cba6f7,header:#7f849c,footer:#7f849c,border:#45475a,label:#fab387,query:#cdd6f4,separator:#45475a,scrollbar:#45475a,preview-border:#45475a,preview-label:#fab387,ghost:#585b70,gutter:-1'
-	;;
+# name: text, user, url, dim, ok, error, selected line, border, ghost, text on a chip
+mocha) palette cdd6f4 cba6f7 fab387 7f849c a6e3a1 f38ba8 313244 45475a 585b70 11111b ;;
+latte) palette 4c4f69 8839ef fe640b 8c8fa1 40a02b d20f39 ccd0da bcc0cc acb0be eff1f5 ;;
+dracula) palette f8f8f2 bd93f9 8be9fd 6272a4 50fa7b ff5555 44475a 44475a 6272a4 282a36 ;;
+gruvbox) palette ebdbb2 83a598 fabd2f 928374 b8bb26 fb4934 3c3836 504945 665c54 282828 ;;
+nord) palette d8dee9 81a1c1 88c0d0 616e88 a3be8c bf616a 3b4252 434c5e 4c566a 2e3440 ;;
+onedark) palette abb2bf c678dd 61afef 5c6370 98c379 e06c75 2c323c 3e4451 4b5263 282c34 ;;
+rosepine) palette e0def4 c4a7e7 f6c177 6e6a86 9ccfd8 eb6f92 26233a 403d52 524f67 191724 ;;
+solarized) palette 93a1a1 268bd2 2aa198 586e75 859900 dc322f 073642 586e75 586e75 002b36 ;;
+tokyonight) palette c0caf5 bb9af7 7aa2f7 565f89 9ece6a f7768e 292e42 3b4261 414868 1a1b26 ;;
 ansi)
 	# The terminal's own 16 colours: works everywhere, light or dark.
 	c_name=$(sgr 1)
@@ -122,7 +173,7 @@ ansi)
 	c_chip_err=$(sgr '1;97;41')
 	fzf_colors='16,hl:3,hl+:3:bold,prompt:3,pointer:3,marker:3,spinner:3,info:-1:dim,header:-1:dim,footer:-1,label:3:bold,preview-label:3,gutter:-1'
 	;;
-*) die "unknown theme '$theme' (ansi, amber, mocha)" ;;
+*) die "unknown theme '$theme' (available: $themes)" ;;
 esac
 
 # jq with the colours and glyphs every formatter needs
@@ -422,7 +473,8 @@ check() {
 	fi
 
 	if [ "$ascii" = 1 ]; then glyphs=ASCII; else glyphs=Unicode; fi
-	say ok "look: theme $theme, $glyphs glyphs"
+	if [ "$theme_saved" = 1 ] && [ "$theme" != none ]; then picked=' (picked with ctrl-t)'; else picked=''; fi
+	say ok "look: theme $theme$picked, $glyphs glyphs"
 
 	printf '\n'
 	if [ "$problems" -eq 0 ]; then
@@ -452,6 +504,23 @@ __show)
 	remember "$2"
 	exec rbw get --full "$2"
 	;;
+__theme)
+	# ctrl-t: save the next theme and start again with the same action and
+	# query. fzf cannot change its colours while it runs.
+	export _VAULTPICK_NOTE=theme
+	{
+		mkdir -p "${theme_file%/*}" && printf '%s\n' "$(next_theme "$theme")" >"$theme_file"
+	} 2>/dev/null || export _VAULTPICK_NOTE=theme-failed
+	shift
+	case "${_VAULTPICK_ACTION:-}" in
+	totp) set -- -o -- "$@" ;;
+	username) set -- -u -- "$@" ;;
+	edit) set -- -e -- "$@" ;;
+	show) set -- -s -- "$@" ;;
+	*) set -- -- "$@" ;;
+	esac
+	exec "$0" "$@"
+	;;
 -c | --check)
 	check
 	exit $?
@@ -474,10 +543,12 @@ case "${1:-}" in
 -u) action=username && shift ;;
 -e) action=edit && shift ;;
 -s) action=show && shift ;;
---) shift ;;
+--) ;;
 -?*) die "unknown option '$1' (see vaultpick -h)" ;;
 esac
+[ "${1:-}" != -- ] || shift
 query="$*"
+export _VAULTPICK_ACTION="$action"
 
 has rbw || die 'rbw not found, see https://github.com/doy/rbw'
 has jq || die 'jq not found, see https://jqlang.org'
@@ -577,11 +648,19 @@ edit) enter_label='edit' ;;
 show) enter_label='show' ;;
 *) enter_label='password' ;;
 esac
-keys="$(key enter "$enter_label")   $(key ^o totp)   $(key ^u username)   $(key ^e edit)   $(key ^s show)   $(key esc close)"
+keys="$(key enter "$enter_label")   $(key ^o totp)   $(key ^u username)   $(key ^e edit)   $(key ^s show)"
+[ "$theme" = none ] || keys="$keys   $(key ^t theme)"
+keys="$keys   $(key esc close)"
 # shellcheck disable=SC2059 # the widths are part of the format
 columns=$(printf "  %s%-${w_name}s  %-${w_user}s  %-6s  %-${w_url}s  %s%s" \
 	"$c_dim" NAME USER 2FA URL FOLDER "$c_reset")
 ready="${c_dim}copying keeps the list open ${g_dot} esc closes${c_reset}"
+# Right after ctrl-t the status line names the new theme instead.
+case "${_VAULTPICK_NOTE:-}" in
+theme) ready="$c_chip_ok $g_ok THEME $c_reset  $c_name$theme$c_reset  ${c_dim}${g_dot} remembered ${g_dot} ctrl-t for the next${c_reset}" ;;
+theme-failed) ready="$c_chip_err $g_err THEME $c_reset  ${c_dim}could not save the theme to $theme_file${c_reset}" ;;
+esac
+unset _VAULTPICK_NOTE
 
 # fzf runs these through "sh -c" (see --with-shell), whatever the login shell.
 copy() { printf 'transform-footer("$_VAULTPICK_SELF" __copy %s {1})' "$1"; }
@@ -591,6 +670,8 @@ edit | show) on_enter=$(run "$action") ;;
 *) on_enter=$(copy "$action") ;;
 esac
 binds="enter:$on_enter,double-click:$on_enter,ctrl-o:$(copy totp),ctrl-u:$(copy username),ctrl-e:$(run edit),ctrl-s:$(run show)"
+# Without colour there is nothing to switch.
+[ "$theme" = none ] || binds="$binds,ctrl-t:become(\"\$_VAULTPICK_SELF\" __theme {q})"
 
 set -- --ansi --exact -i --tiebreak index --with-shell 'sh -c' \
 	--delimiter '\t' --with-nth 2 \

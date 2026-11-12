@@ -42,6 +42,7 @@ class Session:
             "HOME": os.path.join(tmp, "home"),
             "XDG_STATE_HOME": os.path.join(tmp, "state"),
             "XDG_CACHE_HOME": os.path.join(tmp, "cache"),
+            "XDG_CONFIG_HOME": os.path.join(tmp, "config"),
             "STUB_CLIP": self.clip,
             "WAYLAND_DISPLAY": "test",
             "TERM": "xterm-256color",
@@ -178,11 +179,28 @@ def ascii_no_color(tmp):
     assert s.finish() == 0, f"esc should exit 0, got {s.status}"
 
 
+def theme_key(tmp):
+    s = Session(tmp, ["-o", "github"])
+    s.wait_for("octo-demo", "list")
+    s.send("\x14")  # ctrl-t
+    s.wait_for("THEME", "status line after ctrl-t")
+    s.wait_for("amber", "the new theme is named")
+    saved = open(os.path.join(tmp, "config", "vaultpick", "theme")).read()
+    assert saved == "amber\n", f"saved theme is {saved!r}"
+    s.send("\r")  # same query, same action as before
+    s.wait_clip("123456", "enter still copies the TOTP code")
+    s.send("\x14")
+    s.wait_for("mocha", "ctrl-t again")
+    s.send("\x1b")
+    assert s.finish() == 0, f"esc should exit 0, got {s.status}"
+
+
 def main():
     if not fzf_ok():
         print("  skip end-to-end tests: fzf 0.63+ not found")
         return 0
-    tests = [copy_keeps_list_open, show_prints_entry, edit_option, no_match_narrow_terminal, ascii_no_color]
+    tests = [copy_keeps_list_open, show_prints_entry, edit_option, no_match_narrow_terminal, ascii_no_color,
+             theme_key]
     # The rbw cache the TOTP markers come from is not needed here.
     failed = [t.__name__ for t in tests if not check(t.__name__.replace("_", " "), t)]
     print(f"{len(tests)} end-to-end tests, {len(failed)} failed")

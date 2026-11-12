@@ -113,6 +113,47 @@ apple id'
 	VAULTPICK_PASS_LAYOUT=1 vp
 	contains 'pass layout shows the domain folder' "$(line_of 11)" '  forum.example.org           jane  '
 
+	# --- themes: ctrl-t and the remembered choice ---
+	saved="$XDG_CONFIG_HOME/vaultpick/theme"
+	vp
+	contains 'ctrl-t is bound' "$(cat "$STUB_FZF_OUT.args")" 'ctrl-t:become("$_VAULTPICK_SELF" __theme {q})'
+	contains 'ctrl-t is in the key bar' "$(plain <"$STUB_FZF_OUT.args")" ' ^t  theme'
+	NO_COLOR=1 vp
+	lacks 'NO_COLOR: no theme key' "$(cat "$STUB_FZF_OUT.args")" 'ctrl-t'
+	_VAULTPICK_ACTION=totp vp __theme 'apple id'
+	args=$(cat "$STUB_FZF_OUT.args")
+	is 'ctrl-t saves the next theme' "$(cat "$saved")" amber
+	contains 'ctrl-t switches the colours' "$args" '#ffc720'
+	contains 'ctrl-t keeps the query' "$args" '--query
+apple id'
+	contains 'ctrl-t keeps the action' "$args" 'enter:transform-footer("$_VAULTPICK_SELF" __copy totp {1})'
+	contains 'ctrl-t names the theme in the status line' "$(printf '%s' "$args" | plain)" ' ✓ THEME   amber '
+	vp __theme ''
+	is 'ctrl-t again: the one after' "$(cat "$saved")" mocha
+	contains 'an empty query stays empty' "$(cat "$STUB_FZF_OUT.args")" '--query
+'
+	vp __theme -o
+	is 'ctrl-t a third time' "$(cat "$saved")" latte
+	contains 'a query that looks like an option stays a query' "$(cat "$STUB_FZF_OUT.args")" '--query
+-o'
+	echo tokyonight >"$saved"
+	vp __theme ''
+	is 'ctrl-t goes round after the last theme' "$(cat "$saved")" ansi
+	vp
+	lacks 'the theme note is shown once' "$(cat "$STUB_FZF_OUT.args")" 'THEME'
+	echo amber >"$saved"
+	VAULTPICK_THEME=mocha vp
+	contains 'the saved theme wins over VAULTPICK_THEME' "$(cat "$STUB_FZF_OUT.args")" '#ffc720'
+	contains 'check: names the saved theme' "$(vp --check)" 'look: theme amber (picked with ctrl-t)'
+	echo 'no such theme' >"$saved"
+	VAULTPICK_THEME=mocha vp
+	contains 'a broken theme file is ignored' "$(cat "$STUB_FZF_OUT.args")" '#cba6f7'
+	contains 'palette: hex becomes an RGB sequence' "$(cat "$STUB_FZF_OUT")" "$esc[38;2;205;214;244m"
+	rm -f "$saved"
+	: >"$tmp/blocker"
+	XDG_CONFIG_HOME="$tmp/blocker" vp __theme ''
+	contains 'a theme that cannot be saved: says so' "$(plain <"$STUB_FZF_OUT.args")" 'could not save the theme'
+
 	# --- hostile entry data ---
 	RBW_STUB_VAULT="$root/tests/fixtures/hostile.json" NO_COLOR=1 vp
 	is 'hostile data: still one line per entry' "$(wc -l <"$STUB_FZF_OUT" | tr -d ' ')" 2
@@ -220,7 +261,7 @@ apple id'
 
 	# --- the real fzf accepts our options (themes, binds, layout) ---
 	if [ -n "$real_fzf" ] && "$real_fzf" --version | awk -F '[. ]' '{ exit !($1 > 0 || $2 >= 63) }'; then
-		for theme in ansi amber mocha none; do
+		for theme in ansi amber mocha latte dracula gruvbox nord onedark rosepine solarized tokyonight none; do
 			if [ "$theme" = none ]; then export NO_COLOR=1; else export VAULTPICK_THEME=$theme; fi
 			out=$(STUB_FZF_REAL="$real_fzf" vp github 2>&1)
 			contains "real fzf accepts the options ($theme)" "$out" "$(id 1)"

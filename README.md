@@ -113,6 +113,7 @@ The option only decides what Enter does. Every action is also on a key:
 | `ctrl-u` | copy the username                   |
 | `ctrl-e` | edit the entry (`rbw edit`)         |
 | `ctrl-s` | print the whole entry               |
+| `ctrl-t` | switch to the next theme            |
 | `esc`    | close                               |
 
 Entries you used recently are listed first and marked with `↺`. The columns
@@ -126,12 +127,24 @@ Everything is set through environment variables.
 
 | Variable                | Default | Meaning |
 | ----------------------- | ------- | ------- |
-| `VAULTPICK_THEME`       | `ansi`  | `ansi` uses your terminal's 16 colours and works everywhere. `amber` and `mocha` (Catppuccin Mocha) need a terminal with 24-bit colour. [`NO_COLOR`](https://no-color.org) turns colour off. |
+| `VAULTPICK_THEME`       | `ansi`  | The theme to start with, one of the names below. A theme picked with `ctrl-t` wins over this. |
 | `VAULTPICK_RECENT`      | `10`    | How many recently used entries are listed first. `0` turns the history off. |
 | `VAULTPICK_CLEAR`       | `45`    | Seconds until the clipboard is cleared. `0` never clears. |
 | `VAULTPICK_CLIPBOARD`   | `auto`  | Force a clipboard tool: `wayland`, `xclip`, `xsel`, `macos`, `termux`, `wsl` or `rbw`. |
 | `VAULTPICK_ASCII`       | from the locale | `1` uses ASCII only, for terminals or fonts without Unicode. |
 | `VAULTPICK_PASS_LAYOUT` | `0`     | `1` is for vaults imported from `pass` or `gopass`, where the folder is the site and the entry is the username (`logins/example.com/jane`): the folder is then shown as the name. |
+
+### Themes
+
+`ctrl-t` in the list switches to the next theme and remembers it in
+`~/.config/vaultpick/theme`; delete that file to go back to `VAULTPICK_THEME`.
+
+- `ansi` uses your terminal's 16 colours and works everywhere, light or dark.
+- The others need a terminal with 24-bit colour: `amber`, `mocha` and `latte`
+  (Catppuccin Mocha and Latte), `dracula`, `gruvbox`, `nord`, `onedark`,
+  `rosepine`, `solarized` and `tokyonight`. `latte` is for light terminals,
+  the rest for dark ones.
+- [`NO_COLOR`](https://no-color.org) turns colour off, whatever the theme.
 
 The `mocha` theme, searching for every entry with a TOTP code:
 
@@ -184,7 +197,6 @@ Known limits:
 
 ## Roadmap
 
-- More themes.
 - Packages, so that installing and updating is one command: AUR first, then
   a Homebrew tap, later Debian/Ubuntu.
 
