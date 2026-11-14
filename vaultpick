@@ -39,7 +39,7 @@
 # Requires rbw 1.14 or newer, fzf 0.63 or newer, and jq.
 set -eu
 
-version=0.1.0
+version=0.1.1
 
 die() {
 	printf 'vaultpick: %s\n' "$*" >&2
