@@ -7,6 +7,10 @@ entry() { jq -e --arg id "$1" '.[] | select(.id == $id)' "$vault"; }
 
 cmd=${1:-}
 [ $# -eq 0 ] || shift
+# A locked vault that nobody unlocks: everything that needs the keys fails.
+if [ -n "${RBW_STUB_LOCKED:-}" ] && [ -n "${RBW_STUB_UNLOCK_FAIL:-}" ]; then
+	case "$cmd" in get | code | list | edit) exit 1 ;; esac
+fi
 case "$cmd" in
 unlock) [ -z "${RBW_STUB_UNLOCK_FAIL:-}" ] || exit 1 ;;
 unlocked) [ -z "${RBW_STUB_LOCKED:-}" ] || exit 1 ;;

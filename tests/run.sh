@@ -198,6 +198,19 @@ apple id'
 	is 'non-ASCII values survive' "$(cat "$STUB_CLIP")" 'jäne'
 	contains 'VAULTPICK_CLEAR=0 keeps the value' "$(VAULTPICK_CLEAR=0 vp __copy password "$(id 1)")" 'not cleared automatically'
 
+	# --- the vault locks while the list is open ---
+	: >"$RBW_STUB_LOG"
+	out=$(RBW_STUB_LOCKED=1 vp __preview "$(id 3)" | plain)
+	contains 'locked vault: the preview says so' "$out" 'the vault is locked'
+	is 'locked vault: the preview asks rbw for nothing but the state' "$(cat "$RBW_STUB_LOG")" 'unlocked'
+	printf 'before' >"$STUB_CLIP"
+	out=$(RBW_STUB_LOCKED=1 RBW_STUB_UNLOCK_FAIL=1 vp __copy password "$(id 1)")
+	contains 'locked vault: a refused prompt is named' "$out" 'the vault is locked and was not unlocked'
+	lacks 'locked vault: not mistaken for an empty entry' "$out" 'no password in this entry'
+	is 'locked vault: clipboard untouched' "$(cat "$STUB_CLIP")" 'before'
+	vp
+	contains 'copying refreshes the preview' "$(cat "$STUB_FZF_OUT.args")" '__copy username {1})+refresh-preview,'
+
 	# --- other clipboard tools, and clearing ---
 	for tool in wayland xclip xsel macos termux; do
 		STUB_CLIP="$tmp/clip-$tool" VAULTPICK_CLIPBOARD=$tool VAULTPICK_CLEAR=1 vp __copy password "$(id 3)" >/dev/null

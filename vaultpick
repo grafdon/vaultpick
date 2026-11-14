@@ -278,6 +278,11 @@ copy_action() {
 	*) die "unknown field '$what'" ;;
 	esac
 	chip=$(printf '%s' "$what" | tr '[:lower:]' '[:upper:]')
+	if [ -z "$value" ] && ! rbw unlocked >/dev/null 2>&1; then
+		printf '%s %s %s %s  %sthe vault is locked and was not unlocked%s' \
+			"$c_chip_err" "$g_err" "$chip" "$c_reset" "$c_dim" "$c_reset"
+		return 0
+	fi
 	if [ -z "$value" ]; then
 		printf '%s %s %s %s  %sno %s in this entry%s' \
 			"$c_chip_err" "$g_err" "$chip" "$c_reset" "$c_dim" "$what" "$c_reset"
@@ -326,7 +331,14 @@ copy_action() {
 }
 
 # Preview pane: name, username, folder, TOTP yes/no and all URLs. No secrets.
+# The preview runs on every move in the list, so it must never make rbw ask
+# for the master password: with a locked vault that would be one prompt per
+# move. Copying asks once and then refreshes the preview.
 preview() {
+	if ! rbw unlocked >/dev/null 2>&1; then
+		printf '%sthe vault is locked %s copy something to unlock it%s\n' "$c_dim" "$g_dot" "$c_reset"
+		return 0
+	fi
 	rbw get --raw "$1" | jqf '
 		def clean: gsub("[[:cntrl:]]"; " ");
 		(.name // "" | clean) as $name | (.data.username // "" | clean) as $user
@@ -686,7 +698,7 @@ esac
 unset _VAULTPICK_NOTE
 
 # fzf runs these through "sh -c" (see --with-shell), whatever the login shell.
-copy() { printf 'transform-footer("$_VAULTPICK_SELF" __copy %s {1})' "$1"; }
+copy() { printf 'transform-footer("$_VAULTPICK_SELF" __copy %s {1})+refresh-preview' "$1"; }
 run() { printf 'become("$_VAULTPICK_SELF" __%s {1})' "$1"; }
 case "$action" in
 edit | show) on_enter=$(run "$action") ;;
